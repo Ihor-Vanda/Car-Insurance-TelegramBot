@@ -1,6 +1,6 @@
-.env
-obj
-bin
+**/.env
+**/obj/
+**/bin/
 .vscode
 .idea
-publish
+**/publish/
