@@ -8,8 +8,6 @@ public class VehicleData
     public string? Make { get; set; }
     public string? Model { get; set; }
     public int? Year { get; set; }
-    
-    [Key]
     public string RegistrationNumber { get; set; }
 
     public string GetAllData()

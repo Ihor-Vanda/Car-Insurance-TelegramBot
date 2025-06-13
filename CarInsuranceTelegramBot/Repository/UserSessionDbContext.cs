@@ -11,6 +11,11 @@ public class UserSessionDbContext : DbContext
 
     protected override void OnModelCreating(ModelBuilder builder)
     {
+        builder.Entity<UserSession>(session =>
+        {
+            session.OwnsOne(u => u.PassportData);
+            session.OwnsOne(u => u.VehicleData);
+        });
         builder.Entity<UserSession>().HasKey(x => x.ChatId);
         base.OnModelCreating(builder);
     }

@@ -5,8 +5,6 @@ namespace CarInsuranceTelegramBot.Models;
 public class PassportData
 {
     public string? FullName { get; set; }
-    
-    [Key]
     public string? PassportNumber { get; set; }
     public DateTime DateOfBirth { get; set; }
     public DateTime IssueDate { get; set; }

@@ -67,7 +67,7 @@ public class BotUpdateHandler
             }
 
             var session = await GetOrCreateSessionAsync(chatId, cancellationToken);
-            
+
             switch (session.State)
             {
                 case ConversationState.EnteringPassportData:
@@ -100,130 +100,130 @@ public class BotUpdateHandler
             await SendErrorMessageAsync(chatId, cancellationToken);
         }
     }
-    
+
     private async Task HandleManualPassportTextAsync(
         long chatId,
         string text,
         UserSession session,
         CancellationToken cancellationToken)
     {
-    //Input «FullName;PassportNumber;DateOfBirth;IssueDate;ExpiryDate»
-    var parts = text.Split(';', StringSplitOptions.TrimEntries);
-    if (parts.Length != 5)
-    {
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: "Wrong message format. Try again. And follow this example:\nFull Name;Passport Number;Passport Date Of Birth;Date Of Issue;Date Of Expire\nDate format example: '31.12.2000'",
-            cancellationToken: cancellationToken);
-        return;
-    }
-
-    try
-    {
-        var model = new PassportData
+        //Input «FullName;PassportNumber;DateOfBirth;IssueDate;ExpiryDate»
+        var parts = text.Split(';', StringSplitOptions.TrimEntries);
+        if (parts.Length != 5)
         {
-            FullName = parts[0],
-            PassportNumber = parts[1],
-            DateOfBirth = DateTime.ParseExact(parts[2], "dd.MM.yyyy", CultureInfo.InvariantCulture),
-            IssueDate = DateTime.ParseExact(parts[3], "dd.MM.yyyy", CultureInfo.InvariantCulture),
-            ExpiryDate = DateTime.ParseExact(parts[4], "dd.MM.yyyy", CultureInfo.InvariantCulture)
-        };
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: "Wrong message format. Try again. And follow this example:\nFull Name;Passport Number;Passport Date Of Birth;Date Of Issue;Date Of Expire\nDate format example: '31.12.2000'",
+                cancellationToken: cancellationToken);
+            return;
+        }
 
-        session.PassportData = model;
-        session.State = ConversationState.ConfirmingPassport;
-        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        try
+        {
+            var model = new PassportData
+            {
+                FullName = parts[0],
+                PassportNumber = parts[1],
+                DateOfBirth = DateTime.ParseExact(parts[2], "dd.MM.yyyy", CultureInfo.InvariantCulture),
+                IssueDate = DateTime.ParseExact(parts[3], "dd.MM.yyyy", CultureInfo.InvariantCulture),
+                ExpiryDate = DateTime.ParseExact(parts[4], "dd.MM.yyyy", CultureInfo.InvariantCulture)
+            };
 
-        var kb = new InlineKeyboardMarkup([
-            [
+            session.PassportData = model;
+            session.State = ConversationState.ConfirmingPassport;
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+            var kb = new InlineKeyboardMarkup([
+                [
                 InlineKeyboardButton.WithCallbackData("✅ Confirm", "confirmPassport"),
                 InlineKeyboardButton.WithCallbackData("🔄 Try again with photo",  "retryPassport")
             ],
             [
                 InlineKeyboardButton.WithCallbackData("✍️ Enter manual again",    "manualPassport")
             ]
-        ]);
+            ]);
 
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: $"You entered: \n" +
-                  $"Full name: {model.FullName}\n" +
-                  $"Passport number: {model.PassportNumber}\n" +
-                  $"Date of birth: {model.DateOfBirth:dd.MM.yyyy}\n" +
-                  $"Date of issue: {model.IssueDate:dd.MM.yyyy}\n" +
-                  $"Date of expire: {model.ExpiryDate:dd.MM.yyyy}",
-            replyMarkup: kb,
-            cancellationToken: cancellationToken);
-    }
-    catch (FormatException)
-    {
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: "Can't read date. Be sure that date have correct format dd.MM.yyyy and try again.",
-            cancellationToken: cancellationToken);
-    }
-}
-
-private async Task HandleManualVehicleTextAsync(
-    long chatId,
-    string text,
-    UserSession session,
-    CancellationToken cancellationToken)
-{
-    // Input: «VIN;Make,Mode;Year;DocNumber»
-    var parts = text.Split(';', StringSplitOptions.TrimEntries);
-    if (parts.Length != 5)
-    {
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: "Wrong input!",
-            cancellationToken: cancellationToken);
-        return;
-    }
-
-    try
-    {
-        var model = new VehicleData
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: $"You entered: \n" +
+                      $"Full name: {model.FullName}\n" +
+                      $"Passport number: {model.PassportNumber}\n" +
+                      $"Date of birth: {model.DateOfBirth:dd.MM.yyyy}\n" +
+                      $"Date of issue: {model.IssueDate:dd.MM.yyyy}\n" +
+                      $"Date of expire: {model.ExpiryDate:dd.MM.yyyy}",
+                replyMarkup: kb,
+                cancellationToken: cancellationToken);
+        }
+        catch (FormatException)
         {
-            VIN  = parts[0],
-            Make = parts[1],
-            Model = parts[2],
-            Year = int.Parse(parts[3]),
-            RegistrationNumber = parts[4]
-        };
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: "Can't read date. Be sure that date have correct format dd.MM.yyyy and try again.",
+                cancellationToken: cancellationToken);
+        }
+    }
 
-        session.VehicleData = model;
-        session.State = ConversationState.ConformingVehicleDoc;
-        await _sessionRepository.UpdateAsync(session, cancellationToken);
+    private async Task HandleManualVehicleTextAsync(
+        long chatId,
+        string text,
+        UserSession session,
+        CancellationToken cancellationToken)
+    {
+        // Input: «VIN;Make,Mode;Year;DocNumber»
+        var parts = text.Split(';', StringSplitOptions.TrimEntries);
+        if (parts.Length != 5)
+        {
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: "Wrong input!",
+                cancellationToken: cancellationToken);
+            return;
+        }
 
-        var kb = new InlineKeyboardMarkup([
-            [
+        try
+        {
+            var model = new VehicleData
+            {
+                VIN = parts[0],
+                Make = parts[1],
+                Model = parts[2],
+                Year = int.Parse(parts[3]),
+                RegistrationNumber = parts[4]
+            };
+
+            session.VehicleData = model;
+            session.State = ConversationState.ConformingVehicleDoc;
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+            var kb = new InlineKeyboardMarkup([
+                [
                 InlineKeyboardButton.WithCallbackData("✅ Confirm", "confirmVehicleDoc"),
                 InlineKeyboardButton.WithCallbackData("🔄 Try again with photo","retryVehicleFront")
             ],
             [
                 InlineKeyboardButton.WithCallbackData("✍️ Enter manual again","manualVehicle")
             ]
-        ]);
+            ]);
 
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: $"You entered: \n" +
-                  $"VIN: {model.VIN}\n" +
-                  $"Make: {model.Make}\n" +
-                  $"Model: {model.Model}\n" +
-                  $"Year: {model.Year}\n" +
-                  $"Registration number: {model.RegistrationNumber}", 
-            replyMarkup: kb,
-            cancellationToken: cancellationToken);
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: $"You entered: \n" +
+                      $"VIN: {model.VIN}\n" +
+                      $"Make: {model.Make}\n" +
+                      $"Model: {model.Model}\n" +
+                      $"Year: {model.Year}\n" +
+                      $"Registration number: {model.RegistrationNumber}",
+                replyMarkup: kb,
+                cancellationToken: cancellationToken);
+        }
+        catch (FormatException)
+        {
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: "Can't read year. Be sure that you follow example:\nVIN;Make,Model;Year;Registration Number\n and try again.",
+                cancellationToken: cancellationToken);
+        }
     }
-    catch (FormatException)
-    {
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: "Can't read year. Be sure that you follow example:\nVIN;Make,Model;Year;Registration Number\n and try again.",
-            cancellationToken: cancellationToken);
-    }
-}
 
     // Handles callback query updates from Telegram
     private async Task HandleCallbackQueryUpdateAsync(CallbackQuery callbackQuery, CancellationToken cancellationToken)
@@ -272,7 +272,7 @@ private async Task HandleManualVehicleTextAsync(
             case ConversationState.ConfirmingPassport:
                 await HandlePassportConfirmationCallbacks(callbackData, chatId, session, cancellationToken);
                 break;
-            
+
             case ConversationState.ConfirmingVehicleDocFront:
             case ConversationState.ConfirmingVehicleDocBack:
             case ConversationState.ConformingVehicleDoc:
@@ -299,7 +299,7 @@ private async Task HandleManualVehicleTextAsync(
                 break;
         }
     }
-    
+
 
     #region Callback Handlers
     // Handles callbacks specific to passport confirmation state
@@ -316,7 +316,7 @@ private async Task HandleManualVehicleTextAsync(
                     text: "Let's try again. Please send a clear photo of your passport.",
                     cancellationToken: cancellationToken);
                 break;
-            
+
             case "manualPassport":
                 session.State = ConversationState.EnteringPassportData;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
@@ -325,7 +325,7 @@ private async Task HandleManualVehicleTextAsync(
                     text: "Entering passport data in message next way:\nFull Name;Passport Number;Passport Date Of Birth;Date Of Issue;Date Of Expire\nDate format example: '31.12.2000'",
                     cancellationToken: cancellationToken);
                 break;
-            
+
             case "confirmPassport":
                 session.State = ConversationState.AwaitingVehicleFront;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
@@ -356,13 +356,13 @@ private async Task HandleManualVehicleTextAsync(
                     text: "Let's try again. Please send a clear photo of your front side vehicle registration.",
                     cancellationToken: cancellationToken);
                 break;
-            
+
             case "confirmVehicleFront":
                 session.State = ConversationState.AwaitingVehicleBack;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
                 await _botClient.SendMessage(chatId, $"Front side confirmed. Now send the BACK side of your vehicle document.", cancellationToken: cancellationToken);
                 break;
-            
+
             case "retryVehicleBack":
                 session.State = ConversationState.AwaitingVehicleBack;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
@@ -372,19 +372,19 @@ private async Task HandleManualVehicleTextAsync(
                     text: "Let's try again. Please send a clear photo of your back side vehicle registration.",
                     cancellationToken: cancellationToken);
                 break;
-            
+
             case "confirmVehicleBack":
                 session.State = ConversationState.ConformingVehicleDoc;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
                 await RequestVehicleDocConfirmationAsync(chatId, session, cancellationToken);
                 break;
-            
+
             case "confirmVehicleDoc":
                 session.State = ConversationState.AwaitingPriceConfirmation;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
                 await RequestPriceConfirmationAsync(chatId, cancellationToken);
                 break;
-            
+
             case "manualVehicle":
                 session.State = ConversationState.EnteringVehicleData;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
@@ -504,7 +504,7 @@ private async Task HandleManualVehicleTextAsync(
                 case ConversationState.AwaitingVehicleFront:
                     await HandleVehicleFrontPhotoAsync(chatId, message, session, cancellationToken);
                     break;
-                
+
                 case ConversationState.AwaitingVehicleBack:
                     await HandleVehicleBackPhotoAsync(chatId, message, session, cancellationToken);
                     break;
@@ -552,13 +552,13 @@ private async Task HandleManualVehicleTextAsync(
 
         session.State = ConversationState.ConfirmingPassport;
         await _sessionRepository.UpdateAsync(session, cancellationToken);
-        
+
         // Process photo
         PassportData result;
-        
+
         try
         {
-           result = await _readingDocumentService.ExtractPassportDataAsync(memoryStream, cancellationToken);
+            result = await _readingDocumentService.ExtractPassportDataAsync(memoryStream, cancellationToken);
         }
         catch (Exception)
         {
@@ -577,6 +577,7 @@ private async Task HandleManualVehicleTextAsync(
         }
 
         session.PassportData = result;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
 
         // Create confirmation keyboard
         var keyboard = new InlineKeyboardMarkup([
@@ -625,10 +626,10 @@ private async Task HandleManualVehicleTextAsync(
 
         session.State = ConversationState.ConfirmingVehicleDocFront;
         await _sessionRepository.UpdateAsync(session, cancellationToken);
-        
+
         // Process photo
         (string RegistrationNumber, int Year) result;
-        
+
         try
         {
             result = await _readingDocumentService.ExtractVehicleFrontDataAsync(memoryStream, cancellationToken);
@@ -639,16 +640,16 @@ private async Task HandleManualVehicleTextAsync(
                 [InlineKeyboardButton.WithCallbackData("🔄 Try again","retryVehicleFront")],
                 [InlineKeyboardButton.WithCallbackData("✍️ Enter manually","manualVehicle")]
             ]);
-                  
+
             await _botClient.SendMessage(
                 chatId: chatId,
-                text: "Can't extract data from photo. Next step?", 
-                replyMarkup: kb, 
+                text: "Can't extract data from photo. Next step?",
+                replyMarkup: kb,
                 cancellationToken: cancellationToken
             );
             return;
         }
-        
+
         session.VehicleData ??= new VehicleData();
         session.VehicleData.RegistrationNumber = result.RegistrationNumber;
         session.VehicleData.Year = result.Year;
@@ -673,7 +674,7 @@ private async Task HandleManualVehicleTextAsync(
             cancellationToken: cancellationToken
         );
     }
-    
+
     // Processes vehicle document front photo and extracts information
     private async Task HandleVehicleBackPhotoAsync(long chatId, Message message, UserSession session, CancellationToken cancellationToken)
     {
@@ -701,10 +702,10 @@ private async Task HandleManualVehicleTextAsync(
 
         session.State = ConversationState.ConfirmingVehicleDocBack;
         await _sessionRepository.UpdateAsync(session, cancellationToken);
-        
+
         // Process photo
         (string VIN, string Model, string Make) result;
-        
+
         try
         {
             result = await _readingDocumentService.ExtractVehicleBackDataAsync(memoryStream, cancellationToken);
@@ -715,16 +716,16 @@ private async Task HandleManualVehicleTextAsync(
                 [InlineKeyboardButton.WithCallbackData("🔄 Try again","retryVehicleBack")],
                 [InlineKeyboardButton.WithCallbackData("✍️ Enter manually","manualVehicle")]
             ]);
-                  
+
             await _botClient.SendMessage(
                 chatId: chatId,
-                text: "Can't extract data from photo. Next step?", 
-                replyMarkup: kb, 
+                text: "Can't extract data from photo. Next step?",
+                replyMarkup: kb,
                 cancellationToken: cancellationToken
             );
             return;
         }
-        
+
         session.VehicleData ??= new VehicleData();
         session.VehicleData.Model = result.Model;
         session.VehicleData.Make = result.Make;
@@ -768,7 +769,7 @@ private async Task HandleManualVehicleTextAsync(
             replyMarkup: keyboard,
             cancellationToken: cancellationToken);
     }
-    
+
     private async Task RequestVehicleDocConfirmationAsync(long chatId, UserSession session, CancellationToken cancellationToken)
     {
         var keyboard = new InlineKeyboardMarkup([

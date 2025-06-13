@@ -8,12 +8,8 @@ using Telegram.Bot;
 using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 var builder = WebApplication.CreateBuilder(args);
-builder.Services.AddOpenApi();
 
-// Load env variables
 DotEnv.Load();
-
-var mindeeApiKey = Environment.GetEnvironmentVariable("MINDEE_API_KEY");
 
 // Serilog
 Log.Logger = new LoggerConfiguration()
@@ -23,32 +19,14 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-// Telegram Bot Client
-var tgBotToken = Environment.GetEnvironmentVariable("BOT_API");
-ArgumentNullException.ThrowIfNull(tgBotToken, "Can't get Telegram Bot Token from Configuration");
-builder.Services.AddSingleton<ITelegramBotClient>(sp => new TelegramBotClient(tgBotToken));
+builder.Services.Add(new ServiceDescriptor(typeof(Startup), sp =>
+    new Startup(builder.Configuration), ServiceLifetime.Singleton));
 
-// UpdateHandler adn BackGroundService
-builder.Services.AddScoped<BotUpdateHandler>();
-builder.Services.AddHostedService<BotBackGroundService>();
+var startup = builder.Services.BuildServiceProvider().GetRequiredService<Startup>();
 
-// DB context and interface
-builder.Services.AddDbContext<UserSessionDbContext>(opts => opts.UseInMemoryDatabase("Sessions"));
-builder.Services.AddScoped<IUserSessionRepository, UserSessionRepositoryInMemory>();
-
-// Mindee
-builder.Services.AddHttpClient<IReadingDocumentService, MindeeService>(client =>
-{
-    client.BaseAddress = new Uri("https://api.mindee.net");
-    client.DefaultRequestHeaders.Add("Authorization", $"Token {mindeeApiKey}");
-});
+startup.ConfigureServices(builder.Services);
 
 var app = builder.Build();
-
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
 
 app.UseHttpsRedirection();
 
