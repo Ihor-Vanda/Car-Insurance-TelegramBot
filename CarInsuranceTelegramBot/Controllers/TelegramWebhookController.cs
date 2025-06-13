@@ -39,7 +39,6 @@ namespace CarInsuranceTelegramBot.Controllers
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error handling Telegram update.");
-                await _updateHandler.HandleErrorAsync(ex, cancellationToken);
             }
 
             return Ok();

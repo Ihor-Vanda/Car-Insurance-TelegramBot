@@ -37,7 +37,6 @@ public class BotBackGroundService : BackgroundService
             {
                 using var scope = _scopeFactory.CreateScope();
                 var handler = scope.ServiceProvider.GetRequiredService<BotUpdateHandler>();
-                handler.HandleErrorAsync(exception, ct);
             },
 
             receiverOptions: receiverOptions,

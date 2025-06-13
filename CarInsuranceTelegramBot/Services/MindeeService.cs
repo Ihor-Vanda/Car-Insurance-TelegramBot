@@ -110,7 +110,7 @@ public class MindeeService : IReadingDocumentService
                 throw new InvalidOperationException("There is no make");
 
             var make = makeFeature
-                .First()                      // бо це список
+                .First()
                 .AsStringField()
                 .Value
                 ?.Trim() ?? throw new InvalidOperationException("make is empty");
@@ -176,13 +176,13 @@ public class MindeeService : IReadingDocumentService
 
         var pred = apiResult.Document.Inference.Prediction;
 
-        string surname = pred.Surname.Value ?? string.Empty;
-        string givenName = pred.GivenNames.FirstOrDefault()?.Value ?? string.Empty;
+        string surname = pred.Surname.Value ?? throw new InvalidOperationException("Error extracting data");
+        string givenName = pred.GivenNames.FirstOrDefault()?.Value ?? throw new InvalidOperationException("Error extracting data");
         string fullName = $"{surname} {givenName}".Trim();
-        string passportNo = pred.PassportNumber.Value ?? string.Empty;
+        string passportNo = pred.PassportNumber.Value ?? throw new InvalidOperationException("Error extracting data");
 
         DateTime parseDate(string? s) =>
-            DateTime.TryParse(s, out var dt) ? dt : DateTime.MinValue;
+            DateTime.TryParse(s, out var dt) ? dt : throw new InvalidOperationException("Error extracting data");
 
         var dateOfBirth = parseDate(pred.DateOfBirth.Value);
         var issueDate = parseDate(pred.IssueDate.Value);
