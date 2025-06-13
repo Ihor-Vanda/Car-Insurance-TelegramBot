@@ -275,6 +275,7 @@ private async Task HandleManualVehicleTextAsync(
             
             case ConversationState.ConfirmingVehicleDocFront:
             case ConversationState.ConfirmingVehicleDocBack:
+            case ConversationState.ConformingVehicleDoc:
             case ConversationState.AwaitingVehicleFront:
             case ConversationState.AwaitingVehicleBack:
                 await HandleVehicleConfirmationCallbacks(callbackData, chatId, session, cancellationToken);
@@ -379,7 +380,7 @@ private async Task HandleManualVehicleTextAsync(
                 break;
             
             case "confirmVehicleDoc":
-                session.State = ConversationState.AwaitingVehicleFront;
+                session.State = ConversationState.AwaitingPriceConfirmation;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
                 await RequestPriceConfirmationAsync(chatId, cancellationToken);
                 break;

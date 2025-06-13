@@ -15,7 +15,7 @@ public class MindeeService : IReadingDocumentService
     private readonly HttpClient _http;
     private readonly ILogger<MindeeService> _logger;
     private readonly string _apiKey = Environment.GetEnvironmentVariable("MINDEE_API_KEY")!;
-    
+
     public MindeeService(HttpClient http, ILogger<MindeeService> logger)
     {
         _http = http;
@@ -26,7 +26,7 @@ public class MindeeService : IReadingDocumentService
         Stream imageStream,
         CancellationToken ct)
     {
-        
+
         var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.jpg");
         await using (var fs = File.Create(tempPath))
         {
@@ -72,7 +72,7 @@ public class MindeeService : IReadingDocumentService
             try { File.Delete(tempPath); } catch { /* silent */ }
         }
     }
-    
+
     public async Task<(string VIN, string Model, string Make)> ExtractVehicleBackDataAsync(Stream imageStream, CancellationToken ct)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.jpg");
@@ -85,38 +85,44 @@ public class MindeeService : IReadingDocumentService
         {
             var mindeeClient = new MindeeClient(_apiKey);
             var inputSource = new LocalInputSource(tempPath);
-            
+
             var endpoint = new CustomEndpoint(
-                endpointName: "vehicle_passport_back",
+                endpointName: "vehicle_doc_back",
                 accountName: "Ihor17344",
                 version: "1"
             );
-            
+
             var response = await mindeeClient
                 .EnqueueAndParseAsync<GeneratedV1>(inputSource, endpoint);
-            
+
             var fields = response.Document.Inference.Prediction.Fields;
-            
+
             if (!fields.TryGetValue("vin", out var vinFeature))
                 throw new InvalidOperationException("There is no vin");
 
-            var vinField = vinFeature.AsStringField();
-            var vin = vinField.Value ?? 
-                      throw new InvalidOperationException("vin is empty");
-            
+            var vin = vinFeature
+                         .AsStringField()
+                         .Value
+                         ?.Trim() ??
+                     throw new InvalidOperationException("vin is empty");
+
             if (!fields.TryGetValue("make", out var makeFeature))
                 throw new InvalidOperationException("There is no make");
 
-            var makeField = makeFeature.AsStringField();
-            var make = makeField.Value ?? 
-                                     throw new InvalidOperationException("make is empty");
-            
+            var make = makeFeature
+                .First()                      // бо це список
+                .AsStringField()
+                .Value
+                ?.Trim() ?? throw new InvalidOperationException("make is empty");
+
             if (!fields.TryGetValue("type", out var modelFeature))
                 throw new InvalidOperationException("There is no type");
 
-            var modelField = modelFeature.AsStringField();
-            var model = modelField.Value ?? 
-                       throw new InvalidOperationException("type is empty");
+            var model = modelFeature
+                .First()
+                .AsStringField()
+                .Value
+                ?.Trim() ?? throw new InvalidOperationException("type is empty");
 
             return (vin, model, make);
         }
