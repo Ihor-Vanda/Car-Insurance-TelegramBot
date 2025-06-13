@@ -1,7 +1,7 @@
-using CarInsuranseTelegramBot.Models;
+using CarInsuranceTelegramBot.Models;
 using Microsoft.EntityFrameworkCore;
 
-namespace CarInsuranseTelegramBot.Repository;
+namespace CarInsuranceTelegramBot.Repository;
 
 public class UserSessionDbContext : DbContext
 {

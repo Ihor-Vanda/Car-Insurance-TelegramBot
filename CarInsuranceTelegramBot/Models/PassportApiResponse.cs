@@ -1,6 +1,6 @@
 using System.Text.Json.Serialization;
 
-namespace CarInsuranseTelegramBot.Models;
+namespace CarInsuranceTelegramBot.Models;
 
 public class PassportApiResponse
 {

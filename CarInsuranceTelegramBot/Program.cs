@@ -1,10 +1,11 @@
-using CarInsuranseTelegramBot;
-using CarInsuranseTelegramBot.Repository;
-using CarInsuranseTelegramBot.Services;
+using CarInsuranceTelegramBot;
+using CarInsuranceTelegramBot.Repository;
+using CarInsuranceTelegramBot.Services;
 using dotenv.net;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
 using Telegram.Bot;
+using ILogger = Microsoft.Extensions.Logging.ILogger;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddOpenApi();
@@ -15,7 +16,12 @@ DotEnv.Load();
 var mindeeApiKey = Environment.GetEnvironmentVariable("MINDEE_API_KEY");
 
 // Serilog
-builder.Host.UseSerilog((ctx, lc) => lc.WriteTo.Console());
+Log.Logger = new LoggerConfiguration()
+    .MinimumLevel.Debug()
+    .WriteTo.Console()
+    .CreateLogger();
+
+builder.Host.UseSerilog();
 
 // Telegram Bot Client
 var tgBotToken = Environment.GetEnvironmentVariable("BOT_API");

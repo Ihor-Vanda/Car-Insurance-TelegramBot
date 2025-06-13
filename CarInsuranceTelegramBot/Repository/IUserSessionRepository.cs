@@ -1,6 +1,6 @@
-using CarInsuranseTelegramBot.Models;
+using CarInsuranceTelegramBot.Models;
 
-namespace CarInsuranseTelegramBot.Repository;
+namespace CarInsuranceTelegramBot.Repository;
 
 public interface IUserSessionRepository
 {

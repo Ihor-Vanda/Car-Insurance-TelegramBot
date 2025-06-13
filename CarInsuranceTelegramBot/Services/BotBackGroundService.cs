@@ -2,7 +2,7 @@ using Telegram.Bot;
 using Telegram.Bot.Polling;
 using Telegram.Bot.Types.Enums;
 
-namespace CarInsuranseTelegramBot.Services;
+namespace CarInsuranceTelegramBot.Services;
 
 public class BotBackGroundService : BackgroundService
 {

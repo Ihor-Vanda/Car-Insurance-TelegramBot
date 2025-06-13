@@ -1,4 +1,4 @@
-namespace CarInsuranseTelegramBot.Models;
+namespace CarInsuranceTelegramBot.Models;
 
 public class PolicyData
 {

@@ -1,25 +1,26 @@
-using CarInsuranseTelegramBot.Models;
-using CarInsuranseTelegramBot.Repository;
-using CarInsuranseTelegramBot.Services;
+using System.Globalization;
+using CarInsuranceTelegramBot.Models;
+using CarInsuranceTelegramBot.Repository;
+using CarInsuranceTelegramBot.Services;
 using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using Telegram.Bot.Types.ReplyMarkups;
 
-namespace CarInsuranseTelegramBot;
+namespace CarInsuranceTelegramBot;
 
 public class BotUpdateHandler
 {
     private readonly ITelegramBotClient _botClient;
     private readonly IUserSessionRepository _sessionRepository;
     private readonly IReadingDocumentService _readingDocumentService;
-    private ILogger _logger;
+    private readonly ILogger<BotUpdateHandler> _logger;
 
     public BotUpdateHandler(
         ITelegramBotClient botClient,
         IUserSessionRepository sessionRepository,
         IReadingDocumentService readingDocumentService,
-        ILogger logger)
+        ILogger<BotUpdateHandler> logger)
     {
         _botClient = botClient;
         _sessionRepository = sessionRepository;
@@ -33,12 +34,6 @@ public class BotUpdateHandler
     {
         try
         {
-            if (update == null)
-            {
-                _logger.LogWarning("Received null update");
-                return;
-            }
-
             switch (update.Type)
             {
                 case UpdateType.Message:
@@ -58,16 +53,9 @@ public class BotUpdateHandler
         }
     }
 
-
     // Handles message updates from Telegram
     private async Task HandleMessageUpdateAsync(Message message, CancellationToken cancellationToken)
     {
-        if (message == null)
-        {
-            _logger.LogWarning("Received null message");
-            return;
-        }
-
         var chatId = message.Chat.Id;
 
         try
@@ -79,15 +67,22 @@ public class BotUpdateHandler
             }
 
             var session = await GetOrCreateSessionAsync(chatId, cancellationToken);
-
-            if (session.State == ConversationState.Completed)
+            
+            switch (session.State)
             {
-                await _botClient.SendMessage(
-                    chatId: chatId,
-                    text: "Your insurance policy has already been issued. Use /start to purchase a new policy.",
-                    cancellationToken: cancellationToken
-                );
-                return;
+                case ConversationState.EnteringPassportData:
+                    await HandleManualPassportTextAsync(chatId, message.Text!, session, cancellationToken);
+                    return;
+                case ConversationState.EnteringVehicleData:
+                    await HandleManualVehicleTextAsync(chatId, message.Text!, session, cancellationToken);
+                    return;
+                case ConversationState.Completed:
+                    await _botClient.SendMessage(
+                        chatId: chatId,
+                        text: "Your insurance policy has already been issued. Use /start to purchase a new policy.",
+                        cancellationToken: cancellationToken
+                    );
+                    return;
             }
 
             if (HasPhoto(message))
@@ -105,11 +100,135 @@ public class BotUpdateHandler
             await SendErrorMessageAsync(chatId, cancellationToken);
         }
     }
+    
+    private async Task HandleManualPassportTextAsync(
+        long chatId,
+        string text,
+        UserSession session,
+        CancellationToken cancellationToken)
+    {
+    //Input «FullName;PassportNumber;DateOfBirth;IssueDate;ExpiryDate»
+    var parts = text.Split(';', StringSplitOptions.TrimEntries);
+    if (parts.Length != 5)
+    {
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: "Wrong message format. Try again. And follow this example:\nFull Name;Passport Number;Passport Date Of Birth;Date Of Issue;Date Of Expire\nDate format example: '31.12.2000'",
+            cancellationToken: cancellationToken);
+        return;
+    }
+
+    try
+    {
+        var model = new PassportData
+        {
+            FullName = parts[0],
+            PassportNumber = parts[1],
+            DateOfBirth = DateTime.ParseExact(parts[2], "dd.MM.yyyy", CultureInfo.InvariantCulture),
+            IssueDate = DateTime.ParseExact(parts[3], "dd.MM.yyyy", CultureInfo.InvariantCulture),
+            ExpiryDate = DateTime.ParseExact(parts[4], "dd.MM.yyyy", CultureInfo.InvariantCulture)
+        };
+
+        session.PassportData = model;
+        session.State = ConversationState.ConfirmingPassport;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+        var kb = new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithCallbackData("✅ Confirm", "confirmPassport"),
+                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo",  "retryPassport")
+            ],
+            [
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual again",    "manualPassport")
+            ]
+        ]);
+
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: $"You entered: \n" +
+                  $"Full name: {model.FullName}\n" +
+                  $"Passport number: {model.PassportNumber}\n" +
+                  $"Date of birth: {model.DateOfBirth:dd.MM.yyyy}\n" +
+                  $"Date of issue: {model.IssueDate:dd.MM.yyyy}\n" +
+                  $"Date of expire: {model.ExpiryDate:dd.MM.yyyy}",
+            replyMarkup: kb,
+            cancellationToken: cancellationToken);
+    }
+    catch (FormatException)
+    {
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: "Can't read date. Be sure that date have correct format dd.MM.yyyy and try again.",
+            cancellationToken: cancellationToken);
+    }
+}
+
+private async Task HandleManualVehicleTextAsync(
+    long chatId,
+    string text,
+    UserSession session,
+    CancellationToken cancellationToken)
+{
+    // Input: «VIN;Make,Mode;Year;DocNumber»
+    var parts = text.Split(';', StringSplitOptions.TrimEntries);
+    if (parts.Length != 5)
+    {
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: "Wrong input!",
+            cancellationToken: cancellationToken);
+        return;
+    }
+
+    try
+    {
+        var model = new VehicleData
+        {
+            VIN  = parts[0],
+            Make = parts[1],
+            Model = parts[2],
+            Year = int.Parse(parts[3]),
+            RegistrationNumber = parts[4]
+        };
+
+        session.VehicleData = model;
+        session.State = ConversationState.ConformingVehicleDoc;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+        var kb = new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithCallbackData("✅ Confirm", "confirmVehicleDoc"),
+                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo","retryVehicleFront")
+            ],
+            [
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual again","manualVehicle")
+            ]
+        ]);
+
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: $"You entered: \n" +
+                  $"VIN: {model.VIN}\n" +
+                  $"Make: {model.Make}\n" +
+                  $"Model: {model.Model}\n" +
+                  $"Year: {model.Year}\n" +
+                  $"Registration number: {model.RegistrationNumber}", 
+            replyMarkup: kb,
+            cancellationToken: cancellationToken);
+    }
+    catch (FormatException)
+    {
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: "Can't read year. Be sure that you follow example:\nVIN;Make,Model;Year;Registration Number\n and try again.",
+            cancellationToken: cancellationToken);
+    }
+}
 
     // Handles callback query updates from Telegram
     private async Task HandleCallbackQueryUpdateAsync(CallbackQuery callbackQuery, CancellationToken cancellationToken)
     {
-        if (callbackQuery == null || callbackQuery.Message == null)
+        if (callbackQuery.Message == null)
         {
             _logger.LogWarning("Received null callback query or message");
             return;
@@ -153,8 +272,11 @@ public class BotUpdateHandler
             case ConversationState.ConfirmingPassport:
                 await HandlePassportConfirmationCallbacks(callbackData, chatId, session, cancellationToken);
                 break;
-
-            case ConversationState.ConfirmingVehicleDoc:
+            
+            case ConversationState.ConfirmingVehicleDocFront:
+            case ConversationState.ConfirmingVehicleDocBack:
+            case ConversationState.AwaitingVehicleFront:
+            case ConversationState.AwaitingVehicleBack:
                 await HandleVehicleConfirmationCallbacks(callbackData, chatId, session, cancellationToken);
                 break;
 
@@ -176,24 +298,14 @@ public class BotUpdateHandler
                 break;
         }
     }
+    
 
     #region Callback Handlers
-
     // Handles callbacks specific to passport confirmation state
     private async Task HandlePassportConfirmationCallbacks(string callbackData, long chatId, UserSession session, CancellationToken cancellationToken)
     {
         switch (callbackData)
         {
-            case "confirmPassport":
-                session.State = ConversationState.AwaitingVehicleDoc;
-                await _sessionRepository.UpdateAsync(session, cancellationToken);
-
-                await _botClient.SendMessage(
-                    chatId: chatId,
-                    text: "Passport confirmed. Please send a photo of your vehicle registration document.",
-                    cancellationToken: cancellationToken);
-                break;
-
             case "retryPassport":
                 session.State = ConversationState.AwaitingPassport;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
@@ -201,6 +313,25 @@ public class BotUpdateHandler
                 await _botClient.SendMessage(
                     chatId: chatId,
                     text: "Let's try again. Please send a clear photo of your passport.",
+                    cancellationToken: cancellationToken);
+                break;
+            
+            case "manualPassport":
+                session.State = ConversationState.EnteringPassportData;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: "Entering passport data in message next way:\nFull Name;Passport Number;Passport Date Of Birth;Date Of Issue;Date Of Expire\nDate format example: '31.12.2000'",
+                    cancellationToken: cancellationToken);
+                break;
+            
+            case "confirmPassport":
+                session.State = ConversationState.AwaitingVehicleFront;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: "Passport confirmed. Please send a photo of your front vehicle registration document.",
                     cancellationToken: cancellationToken);
                 break;
 
@@ -215,21 +346,53 @@ public class BotUpdateHandler
     {
         switch (callbackData)
         {
-            case "confirmVehicle":
-                session.State = ConversationState.AwaitingPriceConfirmation;
-                await _sessionRepository.UpdateAsync(session, cancellationToken);
-
-                await RequestPriceConfirmationAsync(chatId, cancellationToken);
-                break;
-
-            case "retryVehicle":
-                session.State = ConversationState.AwaitingVehicleDoc;
+            case "retryVehicleFront":
+                session.State = ConversationState.AwaitingVehicleFront;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
 
                 await _botClient.SendMessage(
                     chatId: chatId,
-                    text: "Let's try again. Please send a clear photo of your vehicle registration document.",
+                    text: "Let's try again. Please send a clear photo of your front side vehicle registration.",
                     cancellationToken: cancellationToken);
+                break;
+            
+            case "confirmVehicleFront":
+                session.State = ConversationState.AwaitingVehicleBack;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+                await _botClient.SendMessage(chatId, $"Front side confirmed. Now send the BACK side of your vehicle document.", cancellationToken: cancellationToken);
+                break;
+            
+            case "retryVehicleBack":
+                session.State = ConversationState.AwaitingVehicleBack;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: "Let's try again. Please send a clear photo of your back side vehicle registration.",
+                    cancellationToken: cancellationToken);
+                break;
+            
+            case "confirmVehicleBack":
+                session.State = ConversationState.ConformingVehicleDoc;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+                await RequestVehicleDocConfirmationAsync(chatId, session, cancellationToken);
+                break;
+            
+            case "confirmVehicleDoc":
+                session.State = ConversationState.AwaitingVehicleFront;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+                await RequestPriceConfirmationAsync(chatId, cancellationToken);
+                break;
+            
+            case "manualVehicle":
+                session.State = ConversationState.EnteringVehicleData;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: "Entering vehicle data in message next way:\n" +
+                          "«VIN;Model;Make;Year;Registration number»",
+                    cancellationToken: cancellationToken
+                );
                 break;
 
             default:
@@ -299,7 +462,7 @@ public class BotUpdateHandler
     #endregion
 
     // Handles the /start command
-    public async Task HandleStartCommandAsync(long chatId, CancellationToken cancellationToken)
+    private async Task HandleStartCommandAsync(long chatId, CancellationToken cancellationToken)
     {
         try
         {
@@ -313,11 +476,9 @@ public class BotUpdateHandler
 
             await _sessionRepository.AddAsync(session, cancellationToken);
 
-            var welcomeText = "Hi! I'm a bot that helps you purchase car insurance. \nTo get started, please send a photo of your passport.";
-
             await _botClient.SendMessage(
                 chatId: chatId,
-                text: welcomeText,
+                text: "Hi! I'm a bot that helps you purchase car insurance. \nTo get started, please send a photo of your passport.",
                 cancellationToken: cancellationToken
             );
         }
@@ -339,8 +500,12 @@ public class BotUpdateHandler
                     await HandlePassportPhotoAsync(chatId, message, session, cancellationToken);
                     break;
 
-                case ConversationState.AwaitingVehicleDoc:
-                    await HandleVehiclePhotoAsync(chatId, message, session, cancellationToken);
+                case ConversationState.AwaitingVehicleFront:
+                    await HandleVehicleFrontPhotoAsync(chatId, message, session, cancellationToken);
+                    break;
+                
+                case ConversationState.AwaitingVehicleBack:
+                    await HandleVehicleBackPhotoAsync(chatId, message, session, cancellationToken);
                     break;
 
                 default:
@@ -384,37 +549,56 @@ public class BotUpdateHandler
 
         memoryStream.Position = 0;
 
+        session.State = ConversationState.ConfirmingPassport;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        
         // Process photo
-        var result = await _readingDocumentService.ExtractPassportDataAsync(memoryStream, cancellationToken);
-        if (result == null)
+        PassportData result;
+        
+        try
         {
+           result = await _readingDocumentService.ExtractPassportDataAsync(memoryStream, cancellationToken);
+        }
+        catch (Exception)
+        {
+            var kb = new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithCallbackData("🔄 Try again", "retryPassport")],
+                [InlineKeyboardButton.WithCallbackData("✍️ Enter manually", "manualPassport")]
+            ]);
+
             await _botClient.SendMessage(
                 chatId: chatId,
-                text: "I couldn't extract information from this passport. Please try again with a clearer image.",
+                text: "Can't extract data from photo. What you want to do?",
+                replyMarkup: kb,
                 cancellationToken: cancellationToken
             );
             return;
         }
 
-        // Update session
         session.PassportData = result;
-        session.State = ConversationState.ConfirmingPassport;
-        await _sessionRepository.UpdateAsync(session, cancellationToken);
 
         // Create confirmation keyboard
-        var keyboard = CreateConfirmationKeyboard("confirmPassport", "retryPassport");
+        var keyboard = new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithCallbackData("✅ Confirm","confirmPassport"),
+                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo","retryPassport")
+            ],
+            [
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual","manualPassport"),
+            ]
+        ]);
 
         // Send response
         await _botClient.SendMessage(
             chatId: chatId,
-            text: $"Passport information extracted:\n{result}\n\nIs this correct?",
+            text: $"Passport information extracted:\n{result.GetAllData()}\n \nIs this correct?",
             replyMarkup: keyboard,
             cancellationToken: cancellationToken
         );
     }
 
-    // Processes vehicle document photo and extracts information
-    private async Task HandleVehiclePhotoAsync(long chatId, Message message, UserSession session, CancellationToken cancellationToken)
+    // Processes vehicle document front photo and extracts information
+    private async Task HandleVehicleFrontPhotoAsync(long chatId, Message message, UserSession session, CancellationToken cancellationToken)
     {
         if (message?.Photo == null || message.Photo.Length == 0)
         {
@@ -438,30 +622,129 @@ public class BotUpdateHandler
 
         memoryStream.Position = 0;
 
+        session.State = ConversationState.ConfirmingVehicleDocFront;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        
         // Process photo
-        var result = await _readingDocumentService.ExtractVehicleDataAsync(memoryStream, cancellationToken);
-        if (result == null)
+        (string RegistrationNumber, int Year) result;
+        
+        try
+        {
+            result = await _readingDocumentService.ExtractVehicleFrontDataAsync(memoryStream, cancellationToken);
+        }
+        catch (Exception)
+        {
+            var kb = new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithCallbackData("🔄 Try again","retryVehicleFront")],
+                [InlineKeyboardButton.WithCallbackData("✍️ Enter manually","manualVehicle")]
+            ]);
+                  
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: "Can't extract data from photo. Next step?", 
+                replyMarkup: kb, 
+                cancellationToken: cancellationToken
+            );
+            return;
+        }
+        
+        session.VehicleData ??= new VehicleData();
+        session.VehicleData.RegistrationNumber = result.RegistrationNumber;
+        session.VehicleData.Year = result.Year;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+        // Create confirmation keyboard
+        var keyboard = new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithCallbackData("✅ Confirm","confirmVehicleFront"),
+                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo","retryVehicleFront")
+            ],
+            [
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual","manualVehicle"),
+            ]
+        ]);
+
+        // Send response
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: $"Vehicle information extracted:\nRegistration number: {result.RegistrationNumber}\nYear: {result.Year}\n \nIs this correct?",
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken
+        );
+    }
+    
+    // Processes vehicle document front photo and extracts information
+    private async Task HandleVehicleBackPhotoAsync(long chatId, Message message, UserSession session, CancellationToken cancellationToken)
+    {
+        if (message?.Photo == null || message.Photo.Length == 0)
         {
             await _botClient.SendMessage(
                 chatId: chatId,
-                text: "I couldn't extract information from this vehicle document. Please try again with a clearer image.",
+                text: "I couldn't process this photo. Please try again with a clearer image.",
                 cancellationToken: cancellationToken
             );
             return;
         }
 
-        // Update session
-        session.VehicleData = result;
-        session.State = ConversationState.ConfirmingVehicleDoc;
+        var fileId = message.Photo.Last().FileId;
+
+        // Download the file
+        using var memoryStream = new MemoryStream();
+        await _botClient.GetInfoAndDownloadFile(
+            fileId,
+            memoryStream,
+            cancellationToken: cancellationToken
+        );
+
+        memoryStream.Position = 0;
+
+        session.State = ConversationState.ConfirmingVehicleDocBack;
+        await _sessionRepository.UpdateAsync(session, cancellationToken);
+        
+        // Process photo
+        (string VIN, string Model, string Make) result;
+        
+        try
+        {
+            result = await _readingDocumentService.ExtractVehicleBackDataAsync(memoryStream, cancellationToken);
+        }
+        catch (Exception)
+        {
+            var kb = new InlineKeyboardMarkup([
+                [InlineKeyboardButton.WithCallbackData("🔄 Try again","retryVehicleBack")],
+                [InlineKeyboardButton.WithCallbackData("✍️ Enter manually","manualVehicle")]
+            ]);
+                  
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: "Can't extract data from photo. Next step?", 
+                replyMarkup: kb, 
+                cancellationToken: cancellationToken
+            );
+            return;
+        }
+        
+        session.VehicleData ??= new VehicleData();
+        session.VehicleData.Model = result.Model;
+        session.VehicleData.Make = result.Make;
+        session.VehicleData.VIN = result.VIN;
         await _sessionRepository.UpdateAsync(session, cancellationToken);
 
         // Create confirmation keyboard
-        var keyboard = CreateConfirmationKeyboard("confirmVehicle", "retryVehicle");
+        var keyboard = new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithCallbackData("✅ Confirm","confirmVehicleBack"),
+                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo","retryVehicleBack")
+            ],
+            [
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual","manualVehicle"),
+            ]
+        ]);
 
         // Send response
         await _botClient.SendMessage(
             chatId: chatId,
-            text: $"Vehicle information extracted:\n{result}\n\nIs this correct?",
+            text: $"Vehicle information extracted:\nVIN: {result.VIN}\nModel: {result.Model}\nMake: {result.Make}\n \nIs this correct?",
             replyMarkup: keyboard,
             cancellationToken: cancellationToken
         );
@@ -481,6 +764,25 @@ public class BotUpdateHandler
         await _botClient.SendMessage(
             chatId: chatId,
             text: "Your vehicle insurance price is 100 USD. Do you accept this offer?",
+            replyMarkup: keyboard,
+            cancellationToken: cancellationToken);
+    }
+    
+    private async Task RequestVehicleDocConfirmationAsync(long chatId, UserSession session, CancellationToken cancellationToken)
+    {
+        var keyboard = new InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton.WithCallbackData("✅ Confirm","confirmVehicleDoc"),
+                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo","retryVehicleFront")
+            ],
+            [
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual","manualVehicle"),
+            ]
+        ]);
+
+        await _botClient.SendMessage(
+            chatId: chatId,
+            text: $"Vehicle document info:\n{session.VehicleData.GetAllData()}\n \nIs it correct?",
             replyMarkup: keyboard,
             cancellationToken: cancellationToken);
     }
@@ -515,7 +817,7 @@ public class BotUpdateHandler
             };
 
             // Generate PDF
-            byte[] pdfBytes = GeneratePolicyPdfAsync(policy);
+            var pdfBytes = GeneratePolicyPdfAsync(policy);
 
             // Send as document
             using var fileStream = new MemoryStream(pdfBytes);
@@ -609,9 +911,8 @@ public class BotUpdateHandler
     // Checks if the message text is a start command
     private bool IsStartCommand(string text) => text?.Trim() == "/start";
 
-
     // Checks if the message contains photos
-    private bool HasPhoto(Message message) => message?.Photo != null && message.Photo.Length > 0;
+    private bool HasPhoto(Message message) => message?.Photo is { Length: > 0 };
 
     // Creates a confirmation keyboard with confirm and retry buttons
     private InlineKeyboardMarkup CreateConfirmationKeyboard(string confirmCallbackData, string retryCallbackData)
