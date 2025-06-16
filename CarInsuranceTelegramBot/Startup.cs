@@ -38,6 +38,7 @@ namespace CarInsuranceTelegramBot
 
             // Mindee
             var mindeeApiKey = Environment.GetEnvironmentVariable("MINDEE_API_KEY");
+            services.Configure<MindeeSettings>(Configuration.GetSection("MindeeSettings"));
             ArgumentNullException.ThrowIfNull(mindeeApiKey, nameof(mindeeApiKey));
             services.AddHttpClient<IReadingDocumentService, MindeeService>(client =>
             {

@@ -63,9 +63,9 @@ public static class BotMessages
         $"Here's the passport information I extracted: \n" +
         $"👤 *Full Name*: {passportData.FullName}\n" +
         $"🆔 *Passport Number*: {passportData.PassportNumber}\n" +
-        $"🎂 *Date of Birth*: {passportData.DateOfBirth}\n" +
-        $" issuance: {passportData.IssueDate}\n" +
-        $" validity: {passportData.ExpiryDate}\n\n" +
+        $"🎂 *Date of Birth*: {passportData.DateOfBirth.Date.ToString("d")}\n" +
+        $" issuance: {passportData.IssueDate.ToString("d")}\n" +
+        $" validity: {passportData.ExpiryDate.ToString("d")}\n\n" +
         "Is this correct?";
 
     public static string PassportDataConfirmationPrompt(PassportData passportData) =>
@@ -75,12 +75,11 @@ public static class BotMessages
         "I couldn't extract data from your passport photo. What would you like to do? 👇";
 
     public static string PassportConfirmedPromptVehicleFront =>
-        "Excellent! Passport confirmed. ✅ Now, please send a clear photo of the *front side* of your vehicle registration document. 🚗";
-
+        "Excellent! Passport confirmed. ✅ Now, choose the country for vehicle documents";
 
     // Vehicle Messages
     public static string AwaitingVehicleFrontPhoto =>
-        "Let's try again. Please send a clear photo of the *front side* of your vehicle registration. 📸";
+        "Please send a clear photo of the *front side* of your vehicle registration. 📸";
 
     public static string VehicleFrontPhotoExtractionFailed =>
         "I couldn't extract data from the vehicle front photo. What's next? 👇";
@@ -95,7 +94,7 @@ public static class BotMessages
         "Great! Front side confirmed. ✅ Now, please send a clear photo of the *back side* of your vehicle registration document. 🔙";
 
     public static string AwaitingVehicleBackPhoto =>
-        "Let's try again. Please send a clear photo of the *back side* of your vehicle registration. 📸";
+        "Please send a clear photo of the *back side* of your vehicle registration. 📸";
 
     public static string VehicleBackPhotoExtractionFailed =>
         "I couldn't extract data from the vehicle back photo. What's next? 👇";

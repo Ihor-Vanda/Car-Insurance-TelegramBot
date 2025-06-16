@@ -97,4 +97,12 @@ public static class BotKeyboards
                 InlineKeyboardButton.WithCallbackData("🔄 Start over", "restart")
             ]
         ]);
+
+    public static InlineKeyboardMarkup VehicleCountry => new(
+        [
+            [
+                InlineKeyboardButton.WithCallbackData("🇺🇦 Ukraine", "vehCountry_UA"),
+                InlineKeyboardButton.WithCallbackData("🇺🇸 US", "vehCountry_US")
+            ]
+        ]);
 }

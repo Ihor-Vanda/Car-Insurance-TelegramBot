@@ -19,10 +19,7 @@ Log.Logger = new LoggerConfiguration()
 
 builder.Host.UseSerilog();
 
-builder.Services.Add(new ServiceDescriptor(typeof(Startup), sp =>
-    new Startup(builder.Configuration), ServiceLifetime.Singleton));
-
-var startup = builder.Services.BuildServiceProvider().GetRequiredService<Startup>();
+var startup = new Startup(builder.Configuration);
 
 startup.ConfigureServices(builder.Services);
 

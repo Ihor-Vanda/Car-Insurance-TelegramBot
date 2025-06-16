@@ -6,6 +6,7 @@ using Telegram.Bot;
 using Telegram.Bot.Types;
 using Telegram.Bot.Types.Enums;
 using CarInsuranceTelegramBot.BotSettings;
+using Microsoft.Extensions.Options;
 
 namespace CarInsuranceTelegramBot;
 
@@ -15,17 +16,20 @@ public class BotUpdateHandler
     private readonly IUserSessionRepository _sessionRepository;
     private readonly IReadingDocumentService _readingDocumentService;
     private readonly ILogger<BotUpdateHandler> _logger;
+    private readonly MindeeSettings _mindeeSettings;
 
     public BotUpdateHandler(
         ITelegramBotClient botClient,
         IUserSessionRepository sessionRepository,
         IReadingDocumentService readingDocumentService,
-        ILogger<BotUpdateHandler> logger)
+        ILogger<BotUpdateHandler> logger,
+        IOptions<MindeeSettings> options)
     {
         _botClient = botClient;
         _sessionRepository = sessionRepository;
         _readingDocumentService = readingDocumentService;
         _logger = logger;
+        _mindeeSettings = options.Value;
     }
 
 
@@ -55,7 +59,7 @@ public class BotUpdateHandler
             }
             else if (update.Type == UpdateType.CallbackQuery && update.CallbackQuery != null)
             {
-                await _botClient.AnswerCallbackQuery(update.CallbackQuery.Id, cancellationToken: cancellationToken); // Answer the callback query
+                await _botClient.AnswerCallbackQuery(update.CallbackQuery.Id, cancellationToken: cancellationToken);
                 await HandleCallbackQueryUpdateAsync(update.CallbackQuery, session, cancellationToken);
             }
             else
@@ -161,6 +165,19 @@ public class BotUpdateHandler
         {
             case ConversationState.ConfirmingPassport:
                 await HandlePassportConfirmationCallbacks(callbackQuery.Data!, chatId, session, cancellationToken);
+                break;
+
+            case ConversationState.AwaAwaitingVehicleCountry:
+                var country = callbackQuery.Data!.Split('_')[1];
+                session.CountryCode = country;
+                session.State = ConversationState.AwaitingVehicleFront;
+                await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: BotMessages.AwaitingVehicleFrontPhoto,
+                    cancellationToken: cancellationToken
+                );
                 break;
 
             case ConversationState.ConfirmingVehicleDocFront:
@@ -323,12 +340,13 @@ public class BotUpdateHandler
                 break;
 
             case "confirmPassport":
-                session.State = ConversationState.AwaitingVehicleFront;
+                session.State = ConversationState.AwaAwaitingVehicleCountry;
                 await _sessionRepository.UpdateAsync(session, cancellationToken);
 
                 await _botClient.SendMessage(
                     chatId: chatId,
                     text: BotMessages.PassportConfirmedPromptVehicleFront,
+                    replyMarkup: BotKeyboards.VehicleCountry,
                     parseMode: ParseMode.Markdown,
                     cancellationToken: cancellationToken);
                 break;
@@ -405,24 +423,21 @@ public class BotUpdateHandler
         }
 
         var fileId = message.Photo.Last().FileId;
-
         using var memoryStream = new MemoryStream();
         await _botClient.GetInfoAndDownloadFile(
             fileId,
             memoryStream,
             cancellationToken: cancellationToken
         );
-
         memoryStream.Position = 0;
 
         session.State = ConversationState.ConfirmingVehicleDocFront;
         await _sessionRepository.UpdateAsync(session, cancellationToken);
 
         (string RegistrationNumber, int Year) result;
-
         try
         {
-            result = await _readingDocumentService.ExtractVehicleFrontDataAsync(memoryStream, cancellationToken);
+            result = await _readingDocumentService.ExtractVehicleFrontDataAsync(memoryStream, session.CountryCode!, cancellationToken);
         }
         catch (Exception ex)
         {
@@ -442,13 +457,33 @@ public class BotUpdateHandler
         session.VehicleData.Year = result.Year;
         await _sessionRepository.UpdateAsync(session, cancellationToken);
 
-        await _botClient.SendMessage(
-            chatId: chatId,
-            text: BotMessages.VehicleFrontDataExtracted(result.RegistrationNumber, result.Year),
-            replyMarkup: BotKeyboards.VehicleFrontConfirmationKeyboard,
-            parseMode: ParseMode.Markdown,
-            cancellationToken: cancellationToken
-        );
+        var countryConfig = _mindeeSettings.GetForCountry(session.CountryCode!);
+        if (countryConfig.HasBackPage)
+        {
+            session.State = ConversationState.ConfirmingVehicleDocFront;
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: BotMessages.VehicleFrontDataExtracted(result.RegistrationNumber, result.Year),
+                replyMarkup: BotKeyboards.VehicleFrontConfirmationKeyboard,
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken
+            );
+        }
+        else
+        {
+            session.State = ConversationState.ConformingVehicleDoc;
+            await _sessionRepository.UpdateAsync(session, cancellationToken);
+
+            await _botClient.SendMessage(
+                chatId: chatId,
+                text: BotMessages.VehicleDataConfirmationPrompt(session.VehicleData),
+                replyMarkup: BotKeyboards.VehicleDocConfirmationKeyboard,
+                parseMode: ParseMode.Markdown,
+                cancellationToken: cancellationToken
+            );
+        }
     }
 
     // Processes vehicle document back photo and extracts information.
@@ -483,7 +518,7 @@ public class BotUpdateHandler
 
         try
         {
-            result = await _readingDocumentService.ExtractVehicleBackDataAsync(memoryStream, cancellationToken);
+            result = await _readingDocumentService.ExtractVehicleBackDataAsync(memoryStream, session.CountryCode!, cancellationToken);
         }
         catch (Exception ex)
         {

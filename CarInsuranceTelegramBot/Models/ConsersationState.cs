@@ -5,6 +5,7 @@ public enum ConversationState
     None,
     AwaitingPassport,
     EnteringPassportData,
+    AwaAwaitingVehicleCountry,
     AwaitingVehicleFront,
     ConfirmingVehicleDocFront,
     AwaitingVehicleBack,
