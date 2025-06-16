@@ -16,8 +16,25 @@ public static class BotMessages
     public static string ErrorOccurred =>
         "Oops! 😟 Something went wrong. Please try again, or use /start to begin a new session.";
 
-    public static string UnrecognizedMessage =>
-        "I didn't quite understand that. 🤔 Please use /start to begin or follow the instructions provided.";
+
+    public static string GetUnrecognizedMessage(ConversationState state)
+    {
+        string baseMessage = "I didn't quite understand that. 🤔 Please follow the current instruction:\n\n";
+        string instruction = state switch
+        {
+            ConversationState.AwaitingPassport => AwaitingPassportPhoto,
+            ConversationState.EnteringPassportData => ManualPassportDataPrompt,
+            ConversationState.ConfirmingPassport => "Please confirm if the extracted passport data is correct using the buttons upper message.",
+            ConversationState.AwaAwaitingVehicleCountry => "Please choose the country for your vehicle documents using the buttons upper message.",
+            ConversationState.AwaitingVehicleFront => AwaitingVehicleFrontPhoto,
+            ConversationState.AwaitingVehicleBack => AwaitingVehicleBackPhoto,
+            ConversationState.EnteringVehicleData => ManualVehicleDataPrompt,
+            ConversationState.ConformingVehicleDoc => "Please confirm if the extracted vehicle data is correct using the buttons upper message.",
+            ConversationState.AwaitingPriceConfirmation => "Please agree or decline the insurance price using the buttons upper message.",
+            _ => "Please use /start to begin a new session."
+        };
+        return baseMessage + instruction;
+    }
 
     public static string UnrecognizedCommand =>
         "I don't recognize that command. 🚫 Use /start to begin a new session.";
@@ -26,7 +43,7 @@ public static class BotMessages
         "Your insurance policy has already been issued. 🎉 Use /start to purchase a new policy.";
 
     public static string InvalidActionContext =>
-        "This action isn't valid right now. ❌ Please follow the options I provide.";
+        "This action isn't valid right now. ❌ Please follow the options provided messages upper or use /start to begin a new session.";
 
     public static string PhotoProcessingFailed =>
         "I couldn't process that photo. 📸 Please try again with a clearer image.";
@@ -40,7 +57,6 @@ public static class BotMessages
 
     public static string DeclinedPriceOffer =>
         "Unfortunately, we don't have different pricing options available at this time. 🤷‍♀️";
-
 
     // Passport Messages
     public static string AwaitingPassportPhoto =>
@@ -84,30 +100,14 @@ public static class BotMessages
     public static string VehicleFrontPhotoExtractionFailed =>
         "I couldn't extract data from the vehicle front photo. What's next? 👇";
 
-    public static string VehicleFrontDataExtracted(string registrationNumber, int year) =>
-        $"Here's what I found from the front of your vehicle document: \n" +
-        $"Registration Number: *{registrationNumber}*\n" +
-        $"Year: *{year}*\n\n" +
-        "Is this correct?";
-
     public static string VehicleFrontConfirmedPromptVehicleBack =>
         "Great! Front side confirmed. ✅ Now, please send a clear photo of the *back side* of your vehicle registration document. 🔙";
 
     public static string AwaitingVehicleBackPhoto =>
-        "Please send a clear photo of the *back side* of your vehicle registration. 📸";
-
-    public static string VehicleBackPhotoExtractionFailed =>
-        "I couldn't extract data from the vehicle back photo. What's next? 👇";
-
-    public static string VehicleBackDataExtracted(string vin, string model, string make) =>
-        $"Here's what I found from the back of your vehicle document: \n" +
-        $"VIN: *{vin}*\n" +
-        $"Model: *{model}*\n" +
-        $"Make: *{make}*\n\n" +
-        "Is this correct?";
+        "Next please send a clear photo of the *back side* of your vehicle registration. 📸";
 
     public static string ManualVehicleDataPrompt =>
-        "Please enter your vehicle data in the following format: \\nn" +
+        "Please enter your vehicle data in the following format: \n\n" +
         "*VIN;Make;Model;Year;Registration number*";
 
     public static string ManualVehicleDataFormatError =>

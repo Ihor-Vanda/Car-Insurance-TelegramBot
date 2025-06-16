@@ -33,171 +33,6 @@ public class MindeeService : IReadingDocumentService
             _settings.AccountName, _settings.Version);
     }
 
-    public async Task<(string RegistrationNumber, int Year)> ExtractVehicleFrontDataAsync(
-        Stream imageStream,
-        string countryCode,
-        CancellationToken ct)
-    {
-        _logger.LogInformation("ExtractVehicleFrontDataAsync start for country {Country}", countryCode);
-
-        CountryConfig cfg;
-        try
-        {
-            cfg = _settings.GetForCountry(countryCode);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get configuration for country {Country}", countryCode);
-            throw;
-        }
-
-        if (string.IsNullOrWhiteSpace(cfg.EndpointNameFront))
-        {
-            _logger.LogError("No front endpoint configured for {Country}", countryCode);
-            throw new InvalidOperationException($"No front endpoint configured for {countryCode}");
-        }
-
-        IReadOnlyDictionary<string, GeneratedFeature> fields;
-        try
-        {
-            fields = await EnqueueAndParseAsync(imageStream, cfg.EndpointNameFront, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error parsing front image for country {Country}", countryCode);
-            throw;
-        }
-
-        if (!fields.TryGetValue("number", out var regFeature))
-        {
-            _logger.LogError("Missing field number for country {Country}", countryCode);
-            throw new InvalidOperationException("Missing field: number");
-        }
-
-        string registrationNumber;
-        try
-        {
-            registrationNumber = regFeature.AsStringField().Value?.Trim()
-                ?? throw new InvalidOperationException("number is empty");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract number for country {Country}", countryCode);
-            throw;
-        }
-
-        if (!fields.TryGetValue("year", out var yearFeature))
-        {
-            _logger.LogError("Missing field year for country {Country}", countryCode);
-            throw new InvalidOperationException("Missing field: year");
-        }
-
-        int year;
-        try
-        {
-            var yearStr = yearFeature.AsStringField().Value?.Trim()
-                          ?? throw new InvalidOperationException("year is empty");
-            if (!int.TryParse(yearStr, out year))
-                throw new InvalidOperationException("year must be an integer");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract or parse manufacture year for country {Country}", countryCode);
-            throw;
-        }
-
-        _logger.LogInformation(
-            "ExtractVehicleFrontDataAsync success: RegistrationNumber={Reg}, Year={Year}",
-            registrationNumber, year);
-
-        return (registrationNumber, year);
-    }
-
-    public async Task<(string VIN, string Model, string Make)> ExtractVehicleBackDataAsync(
-        Stream imageStream,
-        string countryCode,
-        CancellationToken ct)
-    {
-        _logger.LogInformation("ExtractVehicleBackDataAsync start for country {Country}", countryCode);
-
-        CountryConfig cfg;
-        try
-        {
-            cfg = _settings.GetForCountry(countryCode);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to get configuration for country {Country}", countryCode);
-            throw;
-        }
-
-        if (!cfg.HasBackPage || string.IsNullOrWhiteSpace(cfg.EndpointNameBack))
-        {
-            _logger.LogError("No back endpoint configured for {Country}", countryCode);
-            throw new InvalidOperationException($"No back endpoint configured for {countryCode}");
-        }
-
-        IReadOnlyDictionary<string, GeneratedFeature> fields;
-        try
-        {
-            fields = await EnqueueAndParseAsync(imageStream, cfg.EndpointNameBack, ct);
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error parsing back image for country {Country}", countryCode);
-            throw;
-        }
-
-        if (!fields.TryGetValue("vin", out var vinFeature))
-        {
-            _logger.LogError("Missing field vin for country {Country}", countryCode);
-            throw new InvalidOperationException("Missing field: vin");
-        }
-        string vin;
-        try
-        {
-            vin = vinFeature.AsStringField().Value?.Trim()
-                  ?? throw new InvalidOperationException("vin is empty");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract VIN for country {Country}", countryCode);
-            throw;
-        }
-
-        string make;
-        try
-        {
-            if (!fields.TryGetValue("make", out var makeFeature))
-                throw new InvalidOperationException("Missing field: make");
-            make = ExtractStringOrList(makeFeature, "make");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract Make for country {Country}", countryCode);
-            throw;
-        }
-
-        string model;
-        try
-        {
-            if (!fields.TryGetValue("model", out var modelFeature))
-                throw new InvalidOperationException("Missing field: model");
-            model = ExtractStringOrList(modelFeature, "model");
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to extract Model for country {Country}", countryCode);
-            throw;
-        }
-
-        _logger.LogInformation(
-            "ExtractVehicleBackDataAsync success: VIN={VIN}, Model={Model}, Make={Make}",
-            vin, model, make);
-
-        return (vin, model, make);
-    }
-
     public async Task<PassportData> ExtractPassportDataAsync(
         Stream imageStream,
         CancellationToken ct)
@@ -264,10 +99,79 @@ public class MindeeService : IReadingDocumentService
         return passport;
     }
 
-    private async Task<IReadOnlyDictionary<string, GeneratedFeature>> EnqueueAndParseAsync(
-        Stream imageStream,
-        string endpointName,
-        CancellationToken ct)
+    public async Task<VehicleData> ExtractVehicleDocumentAsync(IReadOnlyList<Stream> pages, string countryCode, CancellationToken ct)
+    {
+        var cfg = _settings.GetForCountry(countryCode);
+        bool expectsBack = cfg.HasBackPage;
+
+        if (pages.Count < 1 || pages.Count > 2)
+            throw new ArgumentException(
+                $"Expected 1 {(expectsBack ? "or 2" : "")} page(s), but got {pages.Count}");
+
+        var frontFields = await EnqueueAndParseAsync(
+            pages[0],
+            cfg.EndpointNameFront,
+            ct);
+
+        var reg = ParseString(frontFields, "number");
+        var yr = int.Parse(ParseString(frontFields, "year"));
+
+        string? vin = null, make = null, model = null;
+
+        if (expectsBack)
+        {
+            if (pages.Count < 2)
+                throw new InvalidOperationException(
+                    "Document for this country requires back page, but none provided.");
+
+            var backFields = await EnqueueAndParseAsync(
+                pages[1],
+                cfg.EndpointNameBack,
+                ct);
+
+            vin = ParseStringOrNull(backFields, "vin");
+            make = ParseStringOrNull(backFields, "make");
+            model = ParseStringOrNull(backFields, "model");
+        }
+
+        if (!expectsBack)
+        {
+            vin = TryGet(frontFields, "vin");
+            make = TryGet(frontFields, "make");
+            model = TryGet(frontFields, "model");
+        }
+
+        return new VehicleData
+        {
+            RegistrationNumber = reg,
+            Year = yr,
+            VIN = vin ?? throw new InvalidOperationException("VIN missing"),
+            Make = make ?? throw new InvalidOperationException("Make missing"),
+            Model = model ?? throw new InvalidOperationException("Model missing")
+        };
+    }
+
+    private static string ParseString(IReadOnlyDictionary<string, GeneratedFeature> fields, string key)
+    {
+        if (!fields.TryGetValue(key, out var f))
+            throw new InvalidOperationException($"Missing field: {key}");
+        var v = ExtractStringOrList(f, key);
+        if (string.IsNullOrEmpty(v))
+            throw new InvalidOperationException($"Field {key} is empty");
+        return v;
+    }
+    private static string? ParseStringOrNull(IReadOnlyDictionary<string, GeneratedFeature> fields, string key)
+    {
+        if (!fields.TryGetValue(key, out var f))
+            return null;
+        return ExtractStringOrList(f, key);
+    }
+    private static string? TryGet(IReadOnlyDictionary<string, GeneratedFeature> fields, string key) =>
+        fields.TryGetValue(key, out var f)
+            ? f.AsStringField().Value?.Trim()
+            : null;
+
+    private async Task<IReadOnlyDictionary<string, GeneratedFeature>> EnqueueAndParseAsync(Stream imageStream, string endpointName, CancellationToken ct)
     {
         var tempPath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid()}.jpg");
         _logger.LogInformation(

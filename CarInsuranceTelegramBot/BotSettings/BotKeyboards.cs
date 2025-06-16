@@ -15,7 +15,7 @@ public static class BotKeyboards
                 InlineKeyboardButton.WithCallbackData("🔄 Try again with photo", "retryPassport")
             ],
             [
-                InlineKeyboardButton.WithCallbackData("✍️ Enter manual again", "manualPassport")
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual", "manualPassport")
             ]
         ]);
 
@@ -29,42 +29,10 @@ public static class BotKeyboards
             ]
         ]);
 
-    public static InlineKeyboardMarkup VehicleFrontConfirmationKeyboard => new(
-        [
-            [
-                InlineKeyboardButton.WithCallbackData("✅ Confirm", "confirmVehicleFront"),
-                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo", "retryVehicleFront")
-            ],
-            [
-                InlineKeyboardButton.WithCallbackData("✍️ Enter manual again", "manualVehicle")
-            ]
-        ]);
-
-    public static InlineKeyboardMarkup VehicleFrontExtractionFailedKeyboard => new(
+    public static InlineKeyboardMarkup VehicleExtractionFailedKeyboard => new(
         [
             [
                 InlineKeyboardButton.WithCallbackData("🔄 Try again", "retryVehicleFront")
-            ],
-            [
-                InlineKeyboardButton.WithCallbackData("✍️ Enter manually", "manualVehicle")
-            ]
-        ]);
-
-    public static InlineKeyboardMarkup VehicleBackConfirmationKeyboard => new(
-        [
-            [
-                InlineKeyboardButton.WithCallbackData("✅ Confirm", "confirmVehicleBack"),
-                InlineKeyboardButton.WithCallbackData("🔄 Try again with photo", "retryVehicleBack")
-            ],
-            [
-                InlineKeyboardButton.WithCallbackData("✍️ Enter manual again", "manualVehicle")
-            ]
-        ]);
-
-    public static InlineKeyboardMarkup VehicleBackExtractionFailedKeyboard => new(
-        [
-            [
-                InlineKeyboardButton.WithCallbackData("🔄 Try again", "retryVehicleBack")
             ],
             [
                 InlineKeyboardButton.WithCallbackData("✍️ Enter manually", "manualVehicle")
@@ -78,7 +46,7 @@ public static class BotKeyboards
                 InlineKeyboardButton.WithCallbackData("🔄 Try again with photo", "retryVehicleFront")
             ],
             [
-                InlineKeyboardButton.WithCallbackData("✍️ Enter manual again", "manualVehicle")
+                InlineKeyboardButton.WithCallbackData("✍️ Enter manual", "manualVehicle")
             ]
         ]);
 
@@ -102,7 +70,7 @@ public static class BotKeyboards
         [
             [
                 InlineKeyboardButton.WithCallbackData("🇺🇦 Ukraine", "vehCountry_UA"),
-                InlineKeyboardButton.WithCallbackData("🇺🇸 US", "vehCountry_US")
+                InlineKeyboardButton.WithCallbackData("🇺🇸 US (Massachusetts)", "vehCountry_US")
             ]
         ]);
 }

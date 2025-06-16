@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations.Schema;
+
 namespace CarInsuranceTelegramBot.Models;
 
 public class UserSession
