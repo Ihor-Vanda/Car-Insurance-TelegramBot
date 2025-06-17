@@ -30,7 +30,7 @@ public static class BotMessages
             ConversationState.AwaitingVehicleBack => AwaitingVehicleBackPhoto,
             ConversationState.EnteringVehicleData => ManualVehicleDataPrompt,
             ConversationState.ConformingVehicleDoc => "Please confirm if the extracted vehicle data is correct using the buttons upper message.",
-            ConversationState.AwaitingPriceConfirmation => "Please agree or decline the insurance price using the buttons upper message.",
+            ConversationState.AwaitingPriceConfirmation => "Please agree or decline the insurance price using the buttons upper message. Available only provided prices",
             _ => "Please use /start to begin a new session."
         };
         return baseMessage + instruction;
@@ -69,11 +69,11 @@ public static class BotMessages
 
     public static string PassportDataFormatError =>
         "❌ Wrong format! Please ensure you follow this example:\n\n" +
-        "*Full Name;Passport Number;Passport Date Of Birth;Date Of Issue;Date Of Expire*\n\n" +
+        "*Full Name;Passport Number;Date Of Birth;Date Of Issue;Date Of Expire*\n\n" +
         "Date format example: `31.12.2000`";
 
     public static string PassportDateParseError =>
-        "Can't read the date. 🗓️ Please ensure the date is in `dd.MM.yyyy` format and try again.";
+        "Can't read the date. 🗓️ Please ensure the date is  correct date, you follow `dd.MM.yyyy` date format and than try again.";
 
     public static string PassportDataExtracted(PassportData passportData) =>
         $"Here's the passport information I extracted: \n" +

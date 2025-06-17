@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CarInsuranceTelegramBot.Repository;
 using CarInsuranceTelegramBot.Services;
+using CarInsuranceTelegramBot.Services.Gemini;
 using dotenv.net;
 using Microsoft.EntityFrameworkCore;
 using Serilog;
@@ -45,6 +46,9 @@ namespace CarInsuranceTelegramBot
                 client.BaseAddress = new Uri("https://api.mindee.net");
                 client.DefaultRequestHeaders.Add("Authorization", $"Token {mindeeApiKey}");
             });
+
+            //Gemini
+            services.AddSingleton<GeminiTextService>();
         }
 
         public void Configure(IApplicationBuilder app)

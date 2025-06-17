@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="Amazon.Lambda.AspNetCoreServer" Version="9.1.2" />
     <PackageReference Include="dotenv.net" Version="3.2.1" />
+    <PackageReference Include="Google_GenerativeAI" Version="2.7.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.InMemory" Version="9.0.4" />
     <PackageReference Include="Microsoft.AspNetCore.OpenApi" Version="8.0.1" />
     <PackageReference Include="Mindee" Version="3.28.0" />

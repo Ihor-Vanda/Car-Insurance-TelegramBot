@@ -8,6 +8,7 @@ using Telegram.Bot.Types.Enums;
 using CarInsuranceTelegramBot.BotSettings;
 using Microsoft.Extensions.Options;
 using System.Collections.Concurrent;
+using CarInsuranceTelegramBot.Services.Gemini;
 
 namespace CarInsuranceTelegramBot
 {
@@ -18,6 +19,7 @@ namespace CarInsuranceTelegramBot
         private readonly IReadingDocumentService _readingDocumentService;
         private readonly ILogger<BotUpdateHandler> _logger;
         private readonly MindeeSettings _mindeeSettings;
+        private readonly GeminiTextService _geminiService;
         private static readonly ConcurrentDictionary<long, List<byte[]>> _tempFileCache = new();
 
         public BotUpdateHandler(
@@ -25,13 +27,15 @@ namespace CarInsuranceTelegramBot
             IUserSessionRepository sessionRepository,
             IReadingDocumentService readingDocumentService,
             ILogger<BotUpdateHandler> logger,
-            IOptions<MindeeSettings> options)
+            IOptions<MindeeSettings> options,
+            GeminiTextService geminiService)
         {
             _botClient = botClient;
             _sessionRepository = sessionRepository;
             _readingDocumentService = readingDocumentService;
             _logger = logger;
             _mindeeSettings = options.Value;
+            _geminiService = geminiService;
         }
 
 
@@ -67,13 +71,26 @@ namespace CarInsuranceTelegramBot
                 else
                 {
                     _logger.LogInformation("Unhandled update type: {type} in main handler.", update.Type);
-                    await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                    await SendUnrecognizedMessageResponseAsync(chatId, update.Message!.Text!, session, cancellationToken);
                 }
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, "An error occurred while processing update for chat {chatId}", chatId);
-                await SendErrorMessageAsync(chatId, cancellationToken);
+                _logger.LogError("An error occurred while processing update for chat {chatId} : {ex}", chatId, ex);
+                try
+                {
+                    var session = await _sessionRepository.GetAsync(chatId, cancellationToken);
+                    string? AIAnswer = await _geminiService.GetAnswerFromGemini(update.Message!.Text!, session!.State);
+                    await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: AIAnswer!,
+                    cancellationToken: cancellationToken);
+                }
+                catch
+                {
+                    _logger.LogError("An error occurred while try to get answer from gemini for chat {chatId}: {ex}", chatId, ex);
+                    await SendErrorMessageAsync(chatId, cancellationToken);
+                }
             }
         }
 
@@ -91,7 +108,7 @@ namespace CarInsuranceTelegramBot
                     }
                     else
                     {
-                        await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                        await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
                     }
                     break;
 
@@ -102,7 +119,7 @@ namespace CarInsuranceTelegramBot
                     }
                     else
                     {
-                        await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                        await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
                     }
                     break;
 
@@ -113,7 +130,7 @@ namespace CarInsuranceTelegramBot
                     }
                     else
                     {
-                        await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                        await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
                     }
                     break;
 
@@ -124,7 +141,7 @@ namespace CarInsuranceTelegramBot
                     }
                     else
                     {
-                        await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                        await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
                     }
                     break;
 
@@ -135,12 +152,19 @@ namespace CarInsuranceTelegramBot
                     }
                     else
                     {
-                        await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                        await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
                     }
                     break;
 
                 case ConversationState.AwaitingPriceConfirmation:
-                    await RequestPriceConfirmationAsync(chatId, cancellationToken);
+                    if (string.IsNullOrEmpty(message.Text))
+                    {
+                        await RequestPriceConfirmationAsync(chatId, cancellationToken);
+                    }
+                    else
+                    {
+                        await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
+                    }
                     break;
 
                 case ConversationState.Completed:
@@ -153,7 +177,7 @@ namespace CarInsuranceTelegramBot
                     break;
 
                 default:
-                    await SendUnrecognizedMessageResponseAsync(chatId, session, cancellationToken);
+                    await SendUnrecognizedMessageResponseAsync(chatId, message.Text!, session, cancellationToken);
                     break;
             }
         }
@@ -217,11 +241,12 @@ namespace CarInsuranceTelegramBot
             var parts = text.Split(';', StringSplitOptions.TrimEntries);
             if (parts.Length != 5)
             {
-                await _botClient.SendMessage(
-                    chatId: chatId,
-                    text: BotMessages.PassportDataFormatError,
-                    parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                await SendUnrecognizedMessageResponseAsync(chatId, text, session, cancellationToken);
+                // await _botClient.SendMessage(
+                //     chatId: chatId,
+                //     text: BotMessages.PassportDataFormatError,
+                //     parseMode: ParseMode.Markdown,
+                //     cancellationToken: cancellationToken);
                 return;
             }
 
@@ -237,8 +262,8 @@ namespace CarInsuranceTelegramBot
                 };
 
                 if (model.DateOfBirth.Year < 1900 || model.DateOfBirth.Year > DateTime.UtcNow.Year) throw new FormatException("Invalid Birth date");
-                if (model.IssueDate.Year < 1900 || model.IssueDate.Year > DateTime.UtcNow.Year) throw new FormatException("Invalid Issue date");
-                if (model.ExpiryDate.Year < 1900 || model.IssueDate <= model.IssueDate) throw new FormatException("Invalid expiry date");
+                if (model.IssueDate.Year < 1900 || model.IssueDate.Year > DateTime.UtcNow.Year || model.IssueDate < model.DateOfBirth) throw new FormatException("Invalid Issue date");
+                if (model.ExpiryDate.Year < 1900 || model.ExpiryDate <= model.IssueDate) throw new FormatException("Invalid expiry date");
 
                 session.PassportData = model;
                 session.State = ConversationState.ConfirmingPassport;
@@ -375,11 +400,12 @@ namespace CarInsuranceTelegramBot
             var parts = text.Split(';', StringSplitOptions.TrimEntries);
             if (parts.Length != 5)
             {
-                await _botClient.SendMessage(
-                    chatId: chatId,
-                    text: BotMessages.ManualVehicleDataFormatError,
-                    parseMode: ParseMode.Markdown,
-                    cancellationToken: cancellationToken);
+                await SendUnrecognizedMessageResponseAsync(chatId, text, session, cancellationToken);
+                // await _botClient.SendMessage(
+                //     chatId: chatId,
+                //     text: BotMessages.ManualVehicleDataFormatError,
+                //     parseMode: ParseMode.Markdown,
+                //     cancellationToken: cancellationToken);
                 return;
             }
 
@@ -816,14 +842,27 @@ namespace CarInsuranceTelegramBot
         }
 
         // Sends a response for unrecognized messages
-        private async Task SendUnrecognizedMessageResponseAsync(long chatId, UserSession session, CancellationToken cancellationToken)
+        private async Task SendUnrecognizedMessageResponseAsync(long chatId, string message, UserSession session, CancellationToken cancellationToken)
         {
-            await _botClient.SendMessage(
-                chatId: chatId,
-                text: BotMessages.GetUnrecognizedMessage(session.State),
-                parseMode: ParseMode.Markdown,
-                cancellationToken: cancellationToken
-            );
+            try
+            {
+                string? AIAnswer = await _geminiService.GetAnswerFromGemini(message, session.State);
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: AIAnswer!,
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken
+                );
+            }
+            catch
+            {
+                await _botClient.SendMessage(
+                    chatId: chatId,
+                    text: BotMessages.GetUnrecognizedMessage(session.State),
+                    parseMode: ParseMode.Markdown,
+                    cancellationToken: cancellationToken
+                );
+            }
         }
 
         // Sends a response for invalid callback data
